@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Glass UI: RSA + AES Hybrid Encryption</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #d4fcd4; /* Light green background */
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .glass-container {
+      background: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 8px 32px rgba(31, 38, 135, 0.3);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 40px;
+      max-width: 700px;
+      width: 90%;
+      transition: transform 0.3s;
+    }
+
+    .glass-container:hover {
+      transform: scale(1.02);
+    }
+
+    h2 {
+      color: #2c3e50;
+      text-align: center;
+      font-size: 26px;
+      margin-bottom: 20px;
+    }
+
+    label {
+      font-weight: bold;
+      margin-top: 15px;
+      display: block;
+      color: #2c3e50;
+      font-size: 18px;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 2px solid #e74c3c;
+      border-radius: 10px;
+      resize: vertical;
+      background: rgba(255, 255, 255, 0.6);
+      color: #000;
+      margin-top: 6px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 18px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin: 10px 5px 20px 0;
+      background: linear-gradient(to right, #e74c3c, #3498db);
+      color: white;
+      transition: background 0.3s ease;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    button:hover {
+      background: linear-gradient(to right, #c0392b, #2980b9);
+    }
+
+    button:active {
+      transform: translateY(2px);
+    }
+  </style>
+</head>
+<body>
+  <div class="glass-container">
+    <h2>🔐 Hybrid Encryption: RSA + AES</h2>
+
+    <label for="plaintext">Enter Plaintext:</label>
+    <textarea id="plaintext" rows="4">Hello, secret world!</textarea>
+
+    <button onclick="encrypt()">Encrypt</button>
+    <button onclick="decrypt()">Decrypt</button>
+
+    <label for="encrypted">Encrypted Message (Base64):</label>
+    <textarea id="encrypted" rows="4" readonly></textarea>
+
+    <label for="decrypted">Decrypted Message:</label>
+    <textarea id="decrypted" rows="2" readonly></textarea>
+  </div>
+
+  <script>
+    let rsaKeyPair, aesKey, iv, ciphertext, encryptedAESKey;
+
+    function arrayBufferToBase64(buffer) {
+      return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    }
+
+    function base64ToArrayBuffer(base64) {
+      const binary = atob(base64);
+      const buffer = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        buffer[i] = binary.charCodeAt(i);
+      }
+      return buffer;
+    }
+
+    async function generateRSAKeys() {
+      rsaKeyPair = await crypto.subtle.generateKey(
+        {
+          name: "RSA-OAEP",
+          modulusLength: 2048,
+          publicExponent: new Uint8Array([1, 0, 1]),
+          hash: "SHA-256"
+        },
+        true,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    async function generateAESKey() {
+      aesKey = await crypto.subtle.generateKey(
+        {
+          name: "AES-CBC",
+          length: 256
+        },
+        true,
+        ["encrypt", "decrypt"]
+      );
+    }
+
+    async function encrypt() {
+      const message = document.getElementById("plaintext").value;
+      const encodedMessage = new TextEncoder().encode(message);
+
+      await generateRSAKeys();
+      await generateAESKey();
+
+      const rawAESKey = await crypto.subtle.exportKey("raw", aesKey);
+      encryptedAESKey = await crypto.subtle.encrypt(
+        { name: "RSA-OAEP" },
+        rsaKeyPair.publicKey,
+        rawAESKey
+      );
+
+      iv = crypto.getRandomValues(new Uint8Array(16));
+      ciphertext = await crypto.subtle.encrypt(
+        { name: "AES-CBC", iv },
+        aesKey,
+        encodedMessage
+      );
+
+      document.getElementById("encrypted").value = arrayBufferToBase64(ciphertext);
+    }
+
+    async function decrypt() {
+      const rawAESKey = await crypto.subtle.decrypt(
+        { name: "RSA-OAEP" },
+        rsaKeyPair.privateKey,
+        encryptedAESKey
+      );
+
+      const decryptedAESKey = await crypto.subtle.importKey(
+        "raw",
+        rawAESKey,
+        { name: "AES-CBC" },
+        true,
+        ["decrypt"]
+      );
+
+      const decryptedBuffer = await crypto.subtle.decrypt(
+        { name: "AES-CBC", iv },
+        decryptedAESKey,
+        ciphertext
+      );
+
+      const decodedMessage = new TextDecoder().decode(decryptedBuffer);
+      document.getElementById("decrypted").value = decodedMessage;
+    }
+  </script>
+</body>
+</html>
